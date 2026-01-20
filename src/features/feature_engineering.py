@@ -1,11 +1,11 @@
+# feature engineering
 import numpy as np
-import pandas as pd 
-import os 
-from sklearn.model_selection import train_test_split
-import yaml
-import pickle
+import pandas as pd
+import os
 from sklearn.feature_extraction.text import CountVectorizer
+import yaml
 from src.logger import logging
+import pickle
 
 
 def load_params(params_path: str) -> dict:
@@ -29,7 +29,8 @@ def load_data(file_path: str) -> pd.DataFrame:
     """Load data from a CSV file."""
     try:
         df = pd.read_csv(file_path)
-        logging.info('Data loaded from %s', file_path)
+        df.fillna('', inplace=True)
+        logging.info('Data loaded and NaNs filled from %s', file_path)
         return df
     except pd.errors.ParserError as e:
         logging.error('Failed to parse the CSV file: %s', e)
@@ -38,10 +39,10 @@ def load_data(file_path: str) -> pd.DataFrame:
         logging.error('Unexpected error occurred while loading the data: %s', e)
         raise
 
-def apply_bow(train_data: pd.DataFrame, test_data: pd.DataFrame, max_features: int) ->tuple:
-    """Apply Bag of Words vectorization to the text data."""
+def apply_bow(train_data: pd.DataFrame, test_data: pd.DataFrame, max_features: int) -> tuple:
+    """Apply Count Vectorizer to the data."""
     try:
-        logging.info('Applying Bag of Words vectorization...')
+        logging.info("Applying BOW...")
         vectorizer = CountVectorizer(max_features=max_features)
 
         X_train = train_data['review'].values
@@ -54,16 +55,44 @@ def apply_bow(train_data: pd.DataFrame, test_data: pd.DataFrame, max_features: i
 
         train_df = pd.DataFrame(X_train_bow.toarray())
         train_df['label'] = y_train
+
         test_df = pd.DataFrame(X_test_bow.toarray())
         test_df['label'] = y_test
 
-        # Save the vectorizer
-        with open('bow_vectorizer.pkl', 'wb') as f:
-            pickle.dump(vectorizer, f)
-        
-        logging.info('Bag of Words vectorization applied successfully')
+        pickle.dump(vectorizer, open('models/vectorizer.pkl', 'wb'))
+        logging.info('Bag of Words applied and data transformed')
+
         return train_df, test_df
     except Exception as e:
-        logging.error('Error in applying Bag of Words: %s', e)
+        logging.error('Error during Bag of Words transformation: %s', e)
         raise
-    
+
+def save_data(df: pd.DataFrame, file_path: str) -> None:
+    """Save the dataframe to a CSV file."""
+    try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        df.to_csv(file_path, index=False)
+        logging.info('Data saved to %s', file_path)
+    except Exception as e:
+        logging.error('Unexpected error occurred while saving the data: %s', e)
+        raise
+
+def main():
+    try:
+        params = load_params('params.yaml')
+        max_features = params['feature_engineering']['max_features']
+        # max_features = 20
+
+        train_data = load_data('./data/interim/train_processed.csv')
+        test_data = load_data('./data/interim/test_processed.csv')
+
+        train_df, test_df = apply_bow(train_data, test_data, max_features)
+
+        save_data(train_df, os.path.join("./data", "processed", "train_bow.csv"))
+        save_data(test_df, os.path.join("./data", "processed", "test_bow.csv"))
+    except Exception as e:
+        logging.error('Failed to complete the feature engineering process: %s', e)
+        print(f"Error: {e}")
+
+if __name__ == '__main__':
+    main()
